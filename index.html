@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE JUDGEMENT -FULL FLIP-</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --gold: linear-gradient(135deg, #bf953f 0%, #fcf6ba 25%, #b38728 50%, #fbf5b7 75%, #aa771c 100%);
+            --gold-static: #d4af37; --bg-dark: #000;
+        }
+        body { background: var(--bg-dark); color: #fff; font-family: "Hiragino Mincho ProN", serif; margin: 0; overflow-x: hidden; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px; position: relative; z-index: 10; }
+        .main-header { text-align: center; padding: 20px 0; border-bottom: 2px solid var(--gold-static); margin-bottom: 30px; }
+        .main-header h1 { background: var(--gold); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2.2rem; font-weight: 900; letter-spacing: 8px; margin: 0; }
+        
+        .card { background: rgba(20, 20, 20, 0.95); border: 1px solid #333; padding: 30px; margin-bottom: 20px; }
+        input, select { background: #111; border: 1px solid #444; color: #fff; padding: 12px; font-size: 1rem; width: 100%; box-sizing: border-box; margin-bottom: 15px; }
+        #in-name { font-size: 2.5rem; text-align: center; border-width: 0 0 3px 0; background: rgba(255,255,255,0.05); border-color: #444; color: #fff; margin-bottom: 30px; padding: 10px; font-family: serif; }
+        .btn-gold { background: var(--gold); color: #000; font-weight: 900; border: none; cursor: pointer; padding: 18px; font-size: 1.1rem; transition: 0.3s; width: 100%; letter-spacing: 2px; }
+        .btn-gold:hover { transform: scale(1.01); filter: brightness(1.2); }
+
+        /* オーバーレイ */
+        #reveal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #1a1a1a 0%, #000 100%); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.5s; }
+        #reveal-overlay.active { opacity: 1; pointer-events: auto; }
+
+        /* 3Dパネル共通設定 */
+        .panel-grid { display: flex; gap: 15px; justify-content: center; perspective: 1000px; margin-bottom: 30px; }
+        .panel-container { position: relative; }
+        .panel-judge-name { position: absolute; top: -35px; width: 100%; text-align: center; font-size: 0.75rem; color: #888; white-space: nowrap; }
+        
+        .panel-card {
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .panel-card.is-flipped { transform: rotateY(180deg); }
+
+        .panel-face {
+            position: absolute; width: 100%; height: 100%;
+            backface-visibility: hidden;
+            display: flex; align-items: center; justify-content: center;
+            border: 2px solid #333; box-sizing: border-box; border-radius: 4px;
+        }
+
+        .panel-front {
+            background: linear-gradient(135deg, #111 0%, #222 100%);
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+        }
+
+        .panel-back {
+            background: #222;
+            transform: rotateY(180deg);
+            color: #fff;
+            border-color: gold;
+            box-shadow: 0 0 20px rgba(212,175,55,0.3);
+        }
+
+        /* 予選用パネルサイズ */
+        .size-qualify { width: 90px; height: 120px; }
+        .score-num { font-size: 3.5rem; font-family: 'Impact', sans-serif; }
+
+        /* 最終用パネルサイズ */
+        .size-final { width: 85px; height: 320px; }
+        .name-vert { writing-mode: vertical-rl; text-orientation: upright; font-size: 2rem; font-weight: 900; letter-spacing: 6px; }
+
+        /* 投票先カラー */
+        .color-0 { background: #c21d30; } 
+        .color-1 { background: #1e4c9a; } 
+        .color-2 { background: #8c701a; } 
+        .color-3 { background: #1a5e1a; }
+
+        .total-display { font-size: 8rem; font-family: 'Impact', sans-serif; margin-top: 20px; background: var(--gold); -webkit-background-clip: text; -webkit-text-fill-color: transparent; opacity: 0; transition: 0.8s; text-align: center; line-height: 1; }
+        .total-display.active { opacity: 1; }
+
+        .view { display: none; } .view.active { display: block; }
+        .voter-card { border: 2px solid #333; padding: 20px; text-align: center; cursor: pointer; background: #0a0a0a; font-size: 1.8rem; margin-bottom: 10px; }
+        .voter-card.selected { border-color: gold; background: #1a1500; color: gold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        td { padding: 15px; border-bottom: 1px solid #222; }
+    </style>
+</head>
+<body>
+
+    <div id="reveal-overlay">
+        <div id="rev-title" style="color:var(--gold-static); letter-spacing:10px; margin-bottom:15px; font-size: 1.2rem;">JUDGEMENT</div>
+        <div id="rev-name" style="font-size:3.5rem; font-weight:900; margin-bottom:50px; text-align:center;">---</div>
+        <div id="rev-container" class="panel-grid"></div>
+        <div id="rev-total" class="total-display">000</div>
+        <div style="margin-top:40px; width: 320px; display:flex; gap:10px;">
+            <button class="btn-gold" id="btn-start-reveal" onclick="startRevealSequence()">発表開始</button>
+            <button class="btn-gold" id="btn-close-reveal" onclick="closeReveal()" style="display:none; background:#222; color:#fff;">記録を保存</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <header class="main-header"><h1 id="tourney-title-disp">JUDGEMENT SYSTEM</h1></header>
+
+        <div id="view-setup" class="view active">
+            <div class="card">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <div>
+                        <label>大会名</label><input type="text" id="setup-title" value="GRAND PRIX 2026">
+                        <label>審査員数</label>
+                        <select id="setup-judge-count" onchange="createJudgeFields()">
+                            <option value="3">3名</option><option value="5">5名</option><option value="7" selected>7名</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>最小点数</label><input type="number" id="setup-min" value="80">
+                        <label>最終進出枠</label><input type="number" id="setup-finalists" value="3" max="5" min="2">
+                    </div>
+                </div>
+                <label>審査員名設定</label>
+                <div id="judge-names-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:20px;"></div>
+                <button class="btn-gold" onclick="launch()">システム起動</button>
+            </div>
+        </div>
+
+        <div id="view-round" class="view">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div id="order-disp" style="font-size:1.5rem; font-weight:bold; color:var(--gold-static);">第 1 出番</div>
+                <button id="btn-to-final" onclick="goToFinal()" style="background:#800; color:white; border:none; padding:10px 20px; cursor:pointer; display:none;">最終決戦へ</button>
+            </div>
+            <div class="card">
+                <input type="text" id="in-name" placeholder="コンビ名を入力">
+                <div id="in-score-inputs" style="display:grid; gap:10px; margin-bottom:30px;"></div>
+                <button class="btn-gold" onclick="prepareQualifyScore()">ジャッジメント</button>
+            </div>
+            <table><tbody id="rank-table-body"></tbody></table>
+        </div>
+
+        <div id="view-final" class="view">
+            <div class="card">
+                <h3 id="current-voter-name" style="text-align:center; font-size:2rem; color:gold;">審査員：---</h3>
+                <div id="final-options" style="margin:30px 0;"></div>
+                <button class="btn-gold" onclick="submitVote()">投票確定</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let config = {}, judges = [], entries = [], finalists = [], votes = [], currentVoterIdx = 0, selectedFinalistIdx = null, mode = 'qualify', pendingEntry = null;
+        const sounds = { reveal: new Audio('beben.mp3'), win: new Audio('yuusyo.mp3') };
+
+        function createJudgeFields() {
+            const count = document.getElementById('setup-judge-count').value;
+            const container = document.getElementById('judge-names-grid');
+            container.innerHTML = Array.from({length: count}, (_, i) => `<input type="text" id="jn-${i+1}" value="審査員${i+1}">`).join('');
+        }
+        window.onload = createJudgeFields;
+
+        function launch() {
+            Object.values(sounds).forEach(s => { s.load(); s.volume = 0.6; });
+            config = {
+                title: document.getElementById('setup-title').value,
+                count: parseInt(document.getElementById('setup-judge-count').value),
+                min: parseInt(document.getElementById('setup-min').value),
+                finalistsCount: parseInt(document.getElementById('setup-finalists').value)
+            };
+            judges = Array.from({length: config.count}, (_, i) => document.getElementById(`jn-${i+1}`).value);
+            document.getElementById('tourney-title-disp').innerText = config.title;
+            const inputCont = document.getElementById('in-score-inputs');
+            inputCont.style.gridTemplateColumns = `repeat(${config.count}, 1fr)`;
+            inputCont.innerHTML = judges.map((name, i) => `
+                <div style="text-align:center;"><div style="font-size:0.6rem; color:#555; margin-bottom:5px;">${name}</div>
+                <input type="number" class="score-in" id="si-${i}" value="${config.min}" style="text-align:center; font-family:Impact;"></div>
+            `).join('');
+            document.getElementById('view-setup').classList.remove('active');
+            document.getElementById('view-round').classList.add('active');
+        }
+
+        function prepareQualifyScore() {
+            const name = document.getElementById('in-name').value;
+            if(!name) return;
+            mode = 'qualify';
+            const scores = Array.from(document.querySelectorAll('.score-in')).map(i => parseInt(i.value));
+            pendingEntry = { name, scores, total: scores.reduce((a,b)=>a+b, 0) };
+            
+            document.getElementById('rev-title').innerText = "QUALIFY ROUND";
+            document.getElementById('rev-name').innerText = name;
+            const container = document.getElementById('rev-container');
+            container.innerHTML = judges.map((n, i) => `
+                <div class="panel-container size-qualify">
+                    <div class="panel-judge-name">${n}</div>
+                    <div class="panel-card size-qualify" id="pc-${i}">
+                        <div class="panel-face panel-front"></div>
+                        <div class="panel-face panel-back"><span class="score-num">${scores[i]}</span></div>
+                    </div>
+                </div>`).join('');
+            
+            resetRevealUI();
+        }
+
+        function prepareFinalReveal() {
+            mode = 'final';
+            document.getElementById('rev-title').innerText = "FINAL JUDGEMENT";
+            document.getElementById('rev-name').innerText = "最終結果発表";
+            const container = document.getElementById('rev-container');
+            container.innerHTML = judges.map((n, i) => {
+                const vIdx = votes[i];
+                return `
+                <div class="panel-container size-final">
+                    <div class="panel-judge-name">${n}</div>
+                    <div class="panel-card size-final" id="pc-${i}">
+                        <div class="panel-face panel-front"></div>
+                        <div class="panel-face panel-back color-${vIdx}"><span class="name-vert">${finalists[vIdx].name}</span></div>
+                    </div>
+                </div>`;
+            }).join('');
+            
+            resetRevealUI();
+        }
+
+        function resetRevealUI() {
+            document.getElementById('rev-total').classList.remove('active');
+            document.getElementById('rev-total').style.fontSize = "8rem";
+            document.getElementById('btn-start-reveal').style.display = "block";
+            document.getElementById('btn-close-reveal').style.display = "none";
+            document.getElementById('reveal-overlay').style.display = 'flex';
+            setTimeout(() => document.getElementById('reveal-overlay').classList.add('active'), 50);
+        }
+
+        async function startRevealSequence() {
+            document.getElementById('btn-start-reveal').style.display = "none";
+            const delay = mode === 'qualify' ? 800 : 1500;
+
+            for(let i=0; i<config.count; i++) {
+                await new Promise(r => setTimeout(r, delay));
+                sounds.reveal.currentTime = 0; sounds.reveal.play();
+                document.getElementById(`pc-${i}`).classList.add('is-flipped');
+            }
+
+            await new Promise(r => setTimeout(r, 1000));
+            if(mode === 'qualify') {
+                document.getElementById('rev-total').innerText = pendingEntry.total;
+                entries.push(pendingEntry);
+                updateTable();
+            } else {
+                sounds.win.play();
+                confetti({ particleCount: 200, spread: 90, origin: { y: 0.6 }, colors: ['#ffd700', '#ffffff', '#bf953f'] });
+                const counts = new Array(finalists.length).fill(0);
+                votes.forEach(v => counts[v]++);
+                const winner = finalists[counts.indexOf(Math.max(...counts))];
+                document.getElementById('rev-total').innerText = "WINNER: " + winner.name;
+                document.getElementById('rev-total').style.fontSize = "4rem";
+            }
+            document.getElementById('rev-total').classList.add('active');
+            document.getElementById('btn-close-reveal').style.display = "block";
+        }
+
+        function updateTable() {
+            entries.sort((a,b) => b.total - a.total);
+            document.getElementById('rank-table-body').innerHTML = entries.map((e, i) => `
+                <tr style="background:${i < config.finalistsCount ? 'rgba(212,175,55,0.08)' : 'transparent'};">
+                    <td style="font-family:Impact; font-size:2.2rem; color:${i < config.finalistsCount ? 'gold' : '#444'}; width:60px;">${i+1}</td>
+                    <td style="font-weight:bold; font-size:1.6rem;">${e.name}</td>
+                    <td style="font-family:Impact; font-size:2.2rem; text-align:right;">${e.total}</td>
+                </tr>`).join('');
+            document.getElementById('order-disp').innerText = `第 ${entries.length + 1} 出番`;
+            if(entries.length >= config.finalistsCount) document.getElementById('btn-to-final').style.display = "block";
+        }
+
+        function closeReveal() {
+            document.getElementById('reveal-overlay').classList.remove('active');
+            setTimeout(() => {
+                document.getElementById('reveal-overlay').style.display = 'none';
+                if(mode === 'qualify') {
+                    document.getElementById('in-name').value = "";
+                    document.querySelectorAll('.score-in').forEach(input => input.value = config.min);
+                } else if(confirm("大会を終了し、トップ画面に戻りますか？")) {
+                    location.reload();
+                }
+            }, 500);
+        }
+
+        function goToFinal() {
+            finalists = entries.slice(0, config.finalistsCount);
+            document.getElementById('view-round').classList.remove('active');
+            document.getElementById('view-final').classList.add('active');
+            renderFinalStep();
+        }
+
+        function renderFinalStep() {
+            document.getElementById('current-voter-name').innerText = `審査員：${judges[currentVoterIdx]}`;
+            document.getElementById('final-options').innerHTML = finalists.map((f, i) => `<div class="voter-card" id="opt-${i}" onclick="selectedFinalistIdx=${i}; updateFinalSelect()">${f.name}</div>`).join('');
+        }
+
+        function updateFinalSelect() {
+            document.querySelectorAll('.voter-card').forEach((el, i) => el.className = (i === selectedFinalistIdx ? 'voter-card selected' : 'voter-card'));
+        }
+
+        function submitVote() {
+            if(selectedFinalistIdx === null) return;
+            votes.push(selectedFinalistIdx);
+            if(currentVoterIdx < judges.length - 1) { currentVoterIdx++; selectedFinalistIdx = null; renderFinalStep(); }
+            else { prepareFinalReveal(); }
+        }
+    </script>
+</body>
+</html>
